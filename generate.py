@@ -21,6 +21,12 @@ from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
 from wan.utils.utils import merge_video_audio, save_video, str2bool
 
 
+# Cognitive Fabric tasks (engine upgrade — see wan/cognitive_fabric/ and
+# docs/COGNITIVE_FABRIC_ENGINE.md). Original Wan tasks are untouched; these
+# route through the fabric runtime instead of a single pipeline call.
+COGNITIVE_TASKS = ("cognitive-short", "cognitive-film",
+                   "cognitive-anime-episode")
+
 EXAMPLE_PROMPT = {
     "t2v-A14B": {
         "prompt":
@@ -60,6 +66,15 @@ EXAMPLE_PROMPT = {
 
 
 def _validate_args(args):
+    # Cognitive fabric tasks validate themselves inside the fabric runtime
+    # (ckpt_dir is optional there: without it the mock engine dry-runs the
+    # full pipeline instead of failing).
+    if args.task in COGNITIVE_TASKS:
+        args.cognitive_fabric = True
+        if args.base_seed < 0:
+            args.base_seed = random.randint(0, 2**31 - 1)
+        return
+
     # Basic check
     assert args.ckpt_dir is not None, "Please specify the checkpoint directory."
     assert args.task in WAN_CONFIGS, f"Unsupport task: {args.task}"
@@ -110,7 +125,7 @@ def _parse_args():
         "--task",
         type=str,
         default="t2v-A14B",
-        choices=list(WAN_CONFIGS.keys()),
+        choices=list(WAN_CONFIGS.keys()) + list(COGNITIVE_TASKS),
         help="The task to run.")
     parser.add_argument(
         "--size",
@@ -294,6 +309,95 @@ def _parse_args():
         default=80,
         help="Number of frames per clip, 48 or 80 or others (must be multiple of 4) for 14B s2v"
     )
+
+    # ---- cognitive fabric (engine upgrade; original tasks unaffected) ----
+    parser.add_argument(
+        "--cognitive_fabric",
+        type=str2bool,
+        default=False,
+        help="Activate the cognitive fabric engine. Implied by cognitive-* "
+             "tasks; with a classic task it routes the prompt through the "
+             "storyboard-aware pipeline instead of a single raw call.")
+    parser.add_argument(
+        "--storyboard",
+        type=str,
+        default=None,
+        help="Path to a storyboard JSON (cognitive-film). Schema: "
+             "configs/storyboard_schema.json")
+    parser.add_argument(
+        "--series_bible",
+        type=str,
+        default=None,
+        help="Path to a series bible JSON (cognitive-anime-episode).")
+    parser.add_argument(
+        "--episode",
+        type=str,
+        default=None,
+        help="Path to an episode storyboard JSON (cognitive-anime-episode).")
+    parser.add_argument(
+        "--negative_prompt",
+        type=str,
+        default="",
+        help="Negative prompt for cognitive tasks.")
+    parser.add_argument(
+        "--duration_seconds",
+        type=float,
+        default=None,
+        help="Target duration for cognitive-short.")
+    parser.add_argument(
+        "--duration_minutes",
+        type=float,
+        default=None,
+        help="Target duration in minutes (cognitive tasks).")
+    parser.add_argument(
+        "--project_dir",
+        type=str,
+        default=None,
+        help="Project folder for cognitive tasks (default: "
+             "projects/<title>).")
+    parser.add_argument(
+        "--fabric_config",
+        type=str,
+        default=None,
+        help="Path to a cognitive fabric config (yaml/json). Defaults are "
+             "embedded; see configs/cognitive_fabric.default.yaml.")
+    parser.add_argument(
+        "--base_resolution",
+        type=str,
+        default=None,
+        help="Native generation resolution for cognitive tasks (480p/720p).")
+    parser.add_argument(
+        "--final_resolution",
+        type=str,
+        default=None,
+        help="Finishing target for cognitive tasks (720p/1080p/1440p/4k).")
+    parser.add_argument(
+        "--anime_mode",
+        type=str2bool,
+        default=None,
+        help="Enable anime/series conditioning in cognitive tasks.")
+    parser.add_argument(
+        "--repair_loop",
+        type=str2bool,
+        default=None,
+        help="Enable the validate→repair→regenerate loop (default on).")
+    parser.add_argument(
+        "--local_only",
+        type=str2bool,
+        default=True,
+        help="Never touch the network during generation (default true).")
+    parser.add_argument(
+        "--dry_run",
+        type=str2bool,
+        default=False,
+        help="Plan chunks/scenes without generating frames.")
+    parser.add_argument(
+        "--force_mock_engine",
+        type=str2bool,
+        default=False,
+        help="Use the mock engine even when CUDA + checkpoint are available "
+             "(pipeline testing).")
+
     args = parser.parse_args()
     _validate_args(args)
 
@@ -312,7 +416,65 @@ def _init_logging(rank):
         logging.basicConfig(level=logging.ERROR)
 
 
+def run_cognitive(args):
+    """Cognitive fabric route. Kept fully separate from the original
+    generation path: nothing below this function changes for classic tasks."""
+    _init_logging(0)
+    from wan.cognitive_fabric.fabric_runtime import FabricRuntime
+
+    overrides = {"cognitive_fabric": {}}
+    cf = overrides["cognitive_fabric"]
+    if args.base_resolution:
+        cf["base_resolution"] = args.base_resolution
+    if args.final_resolution:
+        cf["final_resolution"] = args.final_resolution
+    if args.anime_mode is not None:
+        cf["anime_mode_enabled"] = args.anime_mode
+    if args.repair_loop is not None:
+        cf["repair_loop_enabled"] = args.repair_loop
+        if not args.repair_loop:
+            cf["max_regenerations_per_chunk"] = 0
+    cf["local_only"] = args.local_only
+
+    runtime = FabricRuntime.from_config_path(args.fabric_config, overrides)
+
+    duration = args.duration_seconds or (
+        args.duration_minutes * 60 if args.duration_minutes else 30.0)
+    project_dir = args.project_dir or os.path.join(
+        "projects", (args.prompt or "cognitive")[:32].strip().replace(
+            " ", "_").replace("/", "_") or "cognitive")
+
+    if args.task == "cognitive-film":
+        assert args.storyboard, "cognitive-film requires --storyboard <json>"
+        report = runtime.run_film(
+            args.storyboard, project_dir=project_dir, ckpt_dir=args.ckpt_dir,
+            dry_run=args.dry_run, force_mock=args.force_mock_engine)
+    elif args.task == "cognitive-anime-episode":
+        assert args.series_bible and args.episode, (
+            "cognitive-anime-episode requires --series_bible and --episode")
+        report = runtime.run_anime_episode(
+            args.series_bible, args.episode, project_dir=project_dir,
+            ckpt_dir=args.ckpt_dir, dry_run=args.dry_run,
+            force_mock=args.force_mock_engine)
+    else:  # cognitive-short, or a classic task with --cognitive_fabric true
+        assert args.prompt, "cognitive-short requires --prompt"
+        report = runtime.run_short(
+            args.prompt, project_dir=project_dir,
+            duration_seconds=duration,
+            negative_prompt=args.negative_prompt or "",
+            ckpt_dir=args.ckpt_dir, dry_run=args.dry_run,
+            force_mock=args.force_mock_engine)
+
+    logging.info("cognitive fabric report:\n%s",
+                 __import__("json").dumps(report, indent=2, default=str))
+    logging.info("Finished.")
+    return report
+
+
 def generate(args):
+    if getattr(args, "cognitive_fabric", False) or args.task in COGNITIVE_TASKS:
+        return run_cognitive(args)
+
     rank = int(os.getenv("RANK", 0))
     world_size = int(os.getenv("WORLD_SIZE", 1))
     local_rank = int(os.getenv("LOCAL_RANK", 0))

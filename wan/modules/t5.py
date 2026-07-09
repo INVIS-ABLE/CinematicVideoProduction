@@ -475,13 +475,21 @@ class T5EncoderModel:
         self,
         text_len,
         dtype=torch.bfloat16,
-        device=torch.cuda.current_device(),
+        device=None,
         checkpoint_path=None,
         tokenizer_path=None,
         shard_fn=None,
     ):
         self.text_len = text_len
         self.dtype = dtype
+        # Cognitive Fabric refactor R-003 (see fable_memory/refactor_log.md):
+        # the default was `torch.cuda.current_device()` evaluated at class
+        # definition time, which crashed `import wan` on CUDA-less machines.
+        # Resolve the device lazily; behaviour on CUDA machines is unchanged
+        # (all in-repo callers pass an explicit device anyway).
+        if device is None:
+            device = torch.cuda.current_device(
+            ) if torch.cuda.is_available() else torch.device('cpu')
         self.device = device
         self.checkpoint_path = checkpoint_path
         self.tokenizer_path = tokenizer_path

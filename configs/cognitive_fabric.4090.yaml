@@ -1,0 +1,8 @@
+# RTX 4090-class single GPU (24 GB): studio mode.
+cognitive_fabric:
+  base_resolution: 720p
+  chunk_seconds: 5
+  reference_token_limit: 50
+engine:
+  offload: smart
+  dtype: bf16
