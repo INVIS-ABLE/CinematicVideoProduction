@@ -25,6 +25,9 @@ class ChunkLedgerEntry:
     attempt: int = 0
     output_path: Optional[str] = None
     quality_overall: float = 0.0
+    saved_frames: int = 0
+    trimmed_lead_frames: int = 0
+    trimmed_tail_frames: int = 0
     updated_at: float = field(default_factory=time.time)
 
 

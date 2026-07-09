@@ -179,9 +179,46 @@ def save_chunk_video(video: torch.Tensor, path: str, fps: int) -> str:
         return str(p.with_suffix(".pt"))
 
 
-def extract_last_frame_png(video: torch.Tensor, path: str) -> Optional[str]:
-    """Persist the terminal frame as PNG for the next chunk's first-frame
-    conditioning. Returns None (and keeps going) if no imaging lib exists."""
+def frame_sharpness(frame: torch.Tensor) -> float:
+    """Laplacian energy of one frame [3, H, W] in [-1, 1] — same measure the
+    Quality Brain uses, so 'sharpest' is consistent across the fabric."""
+    rgb = (frame.clamp(-1, 1) + 1) / 2
+    luma = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]).unsqueeze(0)
+    kernel = torch.tensor([[0., 1., 0.], [1., -4., 1.], [0., 1., 0.]],
+                          device=frame.device).view(1, 1, 3, 3)
+    lap = torch.nn.functional.conv2d(luma.unsqueeze(0), kernel, padding=1)
+    return float(lap.abs().mean())
+
+
+def pick_best_terminal_frame(video: torch.Tensor, window: int = 4) -> int:
+    """Absolute index of the sharpest frame among the last `window` frames.
+
+    Motion blur or a mid-motion pose on the literal last frame poisons the
+    next chunk's first-frame conditioning; picking the crispest frame in a
+    small terminal window gives the handoff a clean anchor (Phase 2,
+    roadmap: 'terminal-frame quality selection')."""
+    f = video.shape[1]
+    window = max(1, min(window, f))
+    start = f - window
+    scores = [frame_sharpness(video[:, i]) for i in range(start, f)]
+    return start + max(range(window), key=lambda i: scores[i])
+
+
+def select_terminal_and_trim(video: torch.Tensor,
+                             window: int = 4) -> tuple:
+    """Pick the best terminal frame and trim the clip to end on it, so the
+    saved clip and the next chunk's conditioning stay time-coherent.
+    Returns (trimmed_video, dropped_tail_frames)."""
+    idx = pick_best_terminal_frame(video, window)
+    dropped = video.shape[1] - 1 - idx
+    return (video[:, :idx + 1] if dropped else video), dropped
+
+
+def extract_terminal_frame_png(video: torch.Tensor, path: str) -> Optional[str]:
+    """Persist the clip's final frame as PNG for the next chunk's
+    first-frame conditioning. Callers trim first (select_terminal_and_trim)
+    so the final frame is already the chosen anchor. Returns None (and keeps
+    going) if no imaging lib exists."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     frame = ((video[:, -1].clamp(-1, 1) + 1) * 127.5).round().byte()
@@ -192,3 +229,7 @@ def extract_last_frame_png(video: torch.Tensor, path: str) -> Optional[str]:
     except Exception as e:
         logger.warning("could not write terminal frame png: %s", e)
         return None
+
+
+# kept as an alias for any external callers of the Phase 1 name
+extract_last_frame_png = extract_terminal_frame_png
