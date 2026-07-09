@@ -397,6 +397,13 @@ def _parse_args():
         default=False,
         help="Use the mock engine even when CUDA + checkpoint are available "
              "(pipeline testing).")
+    parser.add_argument(
+        "--ref_images",
+        type=str,
+        default=None,
+        help="Comma-separated reference images for cognitive tasks "
+             "(character/style/world conditioning via the token stack). "
+             "Use --image for the literal opening frame.")
 
     args = parser.parse_args()
     _validate_args(args)
@@ -434,6 +441,8 @@ def run_cognitive(args):
         cf["repair_loop_enabled"] = args.repair_loop
         if not args.repair_loop:
             cf["max_regenerations_per_chunk"] = 0
+    # finishing/upscale only runs when the user explicitly asks for it
+    cf["finishing_requested"] = args.final_resolution is not None
     cf["local_only"] = args.local_only
 
     runtime = FabricRuntime.from_config_path(args.fabric_config, overrides)
@@ -458,12 +467,16 @@ def run_cognitive(args):
             force_mock=args.force_mock_engine)
     else:  # cognitive-short, or a classic task with --cognitive_fabric true
         assert args.prompt, "cognitive-short requires --prompt"
+        ref_images = ([r.strip() for r in args.ref_images.split(",")
+                       if r.strip()] if args.ref_images else None)
         report = runtime.run_short(
             args.prompt, project_dir=project_dir,
             duration_seconds=duration,
             negative_prompt=args.negative_prompt or "",
             ckpt_dir=args.ckpt_dir, dry_run=args.dry_run,
-            force_mock=args.force_mock_engine)
+            force_mock=args.force_mock_engine,
+            first_frame_image=args.image,
+            reference_images=ref_images)
 
     logging.info("cognitive fabric report:\n%s",
                  __import__("json").dumps(report, indent=2, default=str))

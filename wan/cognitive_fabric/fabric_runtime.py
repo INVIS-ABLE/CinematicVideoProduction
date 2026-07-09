@@ -78,13 +78,26 @@ class FabricRuntime:
                   style: str = "ultra realistic cinematic",
                   ckpt_dir: Optional[str] = None,
                   dry_run: bool = False,
-                  force_mock: bool = False) -> Dict[str, Any]:
+                  force_mock: bool = False,
+                  first_frame_image: Optional[str] = None,
+                  reference_images: Optional[list] = None) -> Dict[str, Any]:
         cf = self.config.data["cognitive_fabric"]
         storyboard = self.director.plan_from_prompt(
             prompt, duration_seconds=duration_seconds, style=style,
             negative_prompt=negative_prompt,
             anime_mode=cf["anime_mode_enabled"],
             chunk_seconds=cf["chunk_seconds"])
+        if first_frame_image:
+            if not Path(first_frame_image).is_file():
+                raise FileNotFoundError(
+                    f"--image not found: {first_frame_image}")
+            storyboard["project"]["first_frame_image"] = first_frame_image
+        if reference_images:
+            missing = [r for r in reference_images if not Path(r).is_file()]
+            if missing:
+                raise FileNotFoundError(f"reference images not found: {missing}")
+            storyboard["reference_uploads"] = [
+                {"path": r, "role": "auto"} for r in reference_images]
         Path(project_dir).mkdir(parents=True, exist_ok=True)
         (Path(project_dir) / "storyboard.json").write_text(
             json.dumps(storyboard, indent=2), encoding="utf-8")

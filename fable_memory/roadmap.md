@@ -10,11 +10,17 @@ mock + real engine seams · tiled hierarchical scaler · stitcher · export
 presets · CLI tasks · health check/installers · 160 CPU tests ·
 5 upstream fixes (R-001..R-005).
 
-## Phase 2 — real-generation continuity hardening (needs CUDA machine)
+## Phase 2A — continuity hardening, CPU-verifiable half (complete)
+Terminal-frame quality selection (anti-blur pick + trim-to-anchor) ·
+duplicated-lead-frame trimming at seams (recorded in timeline/ledger,
+resume-safe) · user reference images into the engine path (--image opening
+frame via i2v clamp, --ref_images into the token stack) · per-scene
+assemblies · streaming finishing/upscale pass wired into export
+(finish_video_file, explicit opt-in via --final_resolution).
+
+## Phase 2B — real-generation continuity hardening (needs CUDA machine)
 Run WanTI2VEngine end-to-end · 2-shot continuity test with real frames ·
-terminal-frame quality (anti-blur pick among last N frames) · overlap-frame
-trimming at stitch · per-scene assemblies · quality thresholds tuned on real
-output.
+quality thresholds tuned on real output · flash-attn parity re-confirmation.
 
 ## Phase 3 — identity/object/world memory on real output
 Real reference encoder (open CLIP-style, local) for identity embeddings ·

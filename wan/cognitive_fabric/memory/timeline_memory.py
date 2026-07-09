@@ -14,11 +14,15 @@ class TimelineMemory:
     def append_clip(self, *, chunk_id: str, shot_id: str, scene_id: str,
                     path: str, frame_num: int, fps: int,
                     transition_in: str = "cut",
-                    transition_out: str = "cut") -> None:
+                    transition_out: str = "cut",
+                    trimmed_lead_frames: int = 0,
+                    trimmed_tail_frames: int = 0) -> None:
         self.entries.append({
             "chunk_id": chunk_id, "shot_id": shot_id, "scene_id": scene_id,
             "path": path, "frame_num": frame_num, "fps": fps,
             "transition_in": transition_in, "transition_out": transition_out,
+            "trimmed_lead_frames": trimmed_lead_frames,
+            "trimmed_tail_frames": trimmed_tail_frames,
         })
 
     def clips_for_scene(self, scene_id: str) -> List[Dict[str, Any]]:

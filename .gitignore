@@ -5,3 +5,12 @@ tmp_examples*
 new_checkpoint*
 batch_test*
 nohup*
+# Cognitive Fabric runtime data — never commit weights, projects, or envs
+models/*
+!models/.gitkeep
+projects/*
+!projects/.gitkeep
+logs/
+.venv/
+venv/
+.pytest_cache/

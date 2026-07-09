@@ -37,9 +37,11 @@ from ..memory.world_memory import WorldMemory
 from ..validators.quality_report import build_quality_report
 from .chunk_scheduler import plan_storyboard_chunks
 from .generation_controller import (
-    extract_last_frame_png,
+    extract_terminal_frame_png,
     save_chunk_video,
+    select_terminal_and_trim,
 )
+from .multimodal_reference_compiler import compile_references
 from .prompt_compiler import PromptCompiler
 from .repair_controller import apply_repair_action
 from .stitcher import concat_clips, ffmpeg_available
@@ -129,8 +131,18 @@ class StoryboardOrchestrator:
         repair = RepairBrain(
             max_attempts=cf["max_regenerations_per_chunk"],
             thresholds=self.config.data.get("repair", {}))
+        # user reference uploads (images/video/audio) -> token stack
+        reference_stack = None
+        uploads = storyboard.get("reference_uploads", [])
+        if uploads:
+            compiled_refs = compile_references(
+                uploads, token_limit=cf["reference_token_limit"])
+            reference_stack = compiled_refs["stack"]
+            logger.info("registered %d reference uploads (%d tokens)",
+                        len(uploads), len(reference_stack))
         compiler = PromptCompiler(matrix=matrix, worlds=worlds,
-                                  objects=objects, style=style)
+                                  objects=objects, style=style,
+                                  reference_stack=reference_stack)
 
         shots_by_id = {s["shot_id"]: s for s in storyboard["shots"]}
         shot_order = [s["shot_id"] for s in storyboard["shots"]]
@@ -145,8 +157,17 @@ class StoryboardOrchestrator:
         previous_shot: Optional[Dict[str, Any]] = None
         generated, repaired, skipped = 0, 0, 0
 
-        for chunk in chunks:
+        first_frame_override = storyboard.get("project", {}).get(
+            "first_frame_image")
+
+        for chunk_pos, chunk in enumerate(chunks):
             shot = shots_by_id[chunk.shot_id]
+            next_chunk = chunks[chunk_pos + 1] if chunk_pos + 1 < len(chunks) \
+                else None
+            successor_wants_continuity = next_chunk is not None and (
+                next_chunk.shot_id == chunk.shot_id or
+                shots_by_id[next_chunk.shot_id].get(
+                    "continuity_from_previous", True))
             ledger = state.ledger[chunk.chunk_id]
             if ledger.status in ("approved", "accepted_with_warning") and \
                     ledger.output_path and Path(ledger.output_path).exists():
@@ -155,9 +176,12 @@ class StoryboardOrchestrator:
                 timeline.append_clip(
                     chunk_id=chunk.chunk_id, shot_id=chunk.shot_id,
                     scene_id=chunk.scene_id, path=ledger.output_path,
-                    frame_num=chunk.frame_num, fps=chunk.fps,
+                    frame_num=ledger.saved_frames or chunk.frame_num,
+                    fps=chunk.fps,
                     transition_in=shot.get("transition_in", "cut"),
-                    transition_out=shot.get("transition_out", "cut"))
+                    transition_out=shot.get("transition_out", "cut"),
+                    trimmed_lead_frames=ledger.trimmed_lead_frames,
+                    trimmed_tail_frames=ledger.trimmed_tail_frames)
                 skipped += 1
                 previous_shot = shot
                 continue
@@ -172,10 +196,18 @@ class StoryboardOrchestrator:
                 "pack_summary": compiled["pack"].summary(),
             }
 
-            # first-frame continuity via predecessor terminal frame
+            # first-frame conditioning: user-supplied opening image for the
+            # very first chunk, predecessor terminal frame afterwards
             first_frame = None
-            if chunk.index > 0 or (shot.get("continuity_from_previous")
-                                   and previous_shot is not None):
+            if chunk_pos == 0 and first_frame_override and \
+                    Path(first_frame_override).exists():
+                from PIL import Image
+                first_frame = Image.open(first_frame_override)
+                chunk.first_frame_path = first_frame_override
+                logger.info("opening chunk conditioned on user image %s",
+                            first_frame_override)
+            elif chunk.index > 0 or (shot.get("continuity_from_previous")
+                                     and previous_shot is not None):
                 if terminal_frame_png and Path(terminal_frame_png).exists():
                     from PIL import Image
                     first_frame = Image.open(terminal_frame_png)
@@ -211,11 +243,23 @@ class StoryboardOrchestrator:
                 repaired += 1
                 attempt += 1
 
+            # seam hygiene: drop the duplicated conditioning frame at the
+            # head, and end the clip on the sharpest frame of the terminal
+            # window so the next chunk anchors on a clean handoff
+            trimmed_lead = 0
+            if chunk.first_frame_path and chunk_pos > 0 and \
+                    video.shape[1] > 1:
+                video = video[:, 1:]
+                trimmed_lead = 1
+            trimmed_tail = 0
+            if successor_wants_continuity and video.shape[1] > 2:
+                video, trimmed_tail = select_terminal_and_trim(video, window=4)
+
             # stream to disk, capture memory, checkpoint
             out_path = save_chunk_video(
                 video, str(Path(project_dir) / "chunks" / chunk.chunk_id),
                 fps=chunk.fps)
-            terminal_frame_png = extract_last_frame_png(
+            terminal_frame_png = extract_terminal_frame_png(
                 video, str(Path(project_dir) / "chunks" /
                            f"{chunk.chunk_id}_last.png"))
             cache.capture(
@@ -229,15 +273,20 @@ class StoryboardOrchestrator:
                       if decision.get("exhausted") else "approved")
             state.update_chunk(chunk.chunk_id, status=status,
                                output_path=out_path,
-                               quality_overall=report.overall())
+                               quality_overall=report.overall(),
+                               saved_frames=video.shape[1],
+                               trimmed_lead_frames=trimmed_lead,
+                               trimmed_tail_frames=trimmed_tail)
             db.upsert_chunk(chunk.chunk_id, chunk.shot_id, status,
                             conditioning["pack_summary"], attempt, out_path)
             timeline.append_clip(
                 chunk_id=chunk.chunk_id, shot_id=chunk.shot_id,
                 scene_id=chunk.scene_id, path=out_path,
-                frame_num=chunk.frame_num, fps=chunk.fps,
+                frame_num=video.shape[1], fps=chunk.fps,
                 transition_in=shot.get("transition_in", "cut"),
-                transition_out=shot.get("transition_out", "cut"))
+                transition_out=shot.get("transition_out", "cut"),
+                trimmed_lead_frames=trimmed_lead,
+                trimmed_tail_frames=trimmed_tail)
             state.save_checkpoint()
             matrix.save(str(Path(project_dir) / "checkpoints"))
             worlds.save(str(Path(project_dir) / "checkpoints"))
@@ -259,6 +308,39 @@ class StoryboardOrchestrator:
             get_fabric_logger("orchestrator").warning(
                 "ffmpeg not found — skipping stitch; clips remain in chunks/")
 
+        # per-scene assemblies (Phase 2: progressive stitching hierarchy)
+        scene_exports = {}
+        if ffmpeg_available():
+            for scene in storyboard.get("scenes", []):
+                sid = scene["scene_id"]
+                scene_paths = [e["path"] for e in timeline.clips_for_scene(sid)
+                               if e["path"].endswith(".mp4")]
+                if scene_paths:
+                    scene_exports[sid] = concat_clips(
+                        scene_paths, str(Path(project_dir) / "exports" /
+                                         "scenes" / f"{sid}.mp4"))
+
+        # finishing pass (only when the user explicitly requested a final
+        # resolution — upscaling is never silently forced)
+        final_export = None
+        if export_path and cf.get("finishing_requested"):
+            try:
+                from .finishing_pipeline import finish_video_file
+                final_res = cf.get("final_resolution", "1080p")
+                target = None
+                if final_res != cf.get("base_resolution"):
+                    target = self.config.resolution(final_res)
+                final_export = finish_video_file(
+                    export_path,
+                    str(Path(project_dir) / "exports" /
+                        f"final_{final_res}.mp4"),
+                    look=_look_for_style(
+                        storyboard.get("project", {}).get("style", "")),
+                    target_size=target)
+                logger.info("finishing pass complete: %s", final_export)
+            except Exception as e:
+                logger.warning("finishing pass skipped: %s", e)
+
         report_payload = {
             "project_id": project_id,
             "engine": engine.name,
@@ -267,6 +349,8 @@ class StoryboardOrchestrator:
             "chunks_skipped_resume": skipped,
             "repair_actions": repaired,
             "export": export_path,
+            "scene_exports": scene_exports,
+            "final_export": final_export,
             "timeline": str(Path(project_dir) / "timeline.json"),
             "elapsed_seconds": round(time.time() - started, 2),
         }
@@ -274,3 +358,17 @@ class StoryboardOrchestrator:
             json.dumps(report_payload, indent=2), encoding="utf-8")
         db.close()
         return report_payload
+
+
+def _look_for_style(style: str) -> str:
+    """Map a free-text style to a finishing look (finishing_pipeline.LOOKS)."""
+    text = style.lower()
+    if "anime" in text:
+        return "anime_vivid"
+    if "documentary" in text:
+        return "documentary"
+    if "noir" in text or "dark" in text:
+        return "noir"
+    if "cinematic" in text or "trailer" in text or "film" in text:
+        return "cinematic_teal_orange"
+    return "neutral"
