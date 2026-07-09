@@ -1,0 +1,8 @@
+# Cognitive Fabric extras on top of requirements.txt.
+# Note: the base engine also needs `einops` (used by wan/modules/vae2_1.py but
+# missing from upstream requirements.txt) — included here.
+einops
+pyyaml
+imageio
+imageio-ffmpeg
+pytest

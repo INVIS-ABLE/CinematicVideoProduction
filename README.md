@@ -1,4 +1,34 @@
-# Wan2.2
+# Wan 2.2 — Cognitive Fabric Engine
+
+> **This repository is an internally upgraded fork of
+> [Wan-Video/Wan2.2](https://github.com/Wan-Video/Wan2.2)** (Apache-2.0,
+> vendored at commit `42bf4cf`, see `UPSTREAM_WAN22_COMMIT.txt`). The base
+> model is unchanged and all original tasks work exactly as upstream. On top
+> of it, the **Cognitive Fabric** (`wan/cognitive_fabric/`) turns Wan 2.2
+> into a storyboard-aware, memory-carrying, self-repairing cinematic engine:
+> multi-shot films from one prompt, character/object/world continuity,
+> chunked long-form generation with crash-resume, quality validation and a
+> repair loop, tiled progressive 1080p/1440p/4K finishing, stitching, and a
+> strict local-first policy.
+>
+> - Start here: **[docs/COGNITIVE_FABRIC_ENGINE.md](docs/COGNITIVE_FABRIC_ENGINE.md)**
+> - User guide: [docs/USER_WORKFLOW.md](docs/USER_WORKFLOW.md) ·
+>   Storyboards: [docs/STORYBOARD_FORMAT.md](docs/STORYBOARD_FORMAT.md) ·
+>   60-minute pipeline: [docs/LONGFORM_60_MINUTE_PIPELINE.md](docs/LONGFORM_60_MINUTE_PIPELINE.md)
+> - What changed inside the engine (5 upstream fixes, all
+>   behaviour-preserving): [docs/INTERNAL_WAN_REFACTOR_MAP.md](docs/INTERNAL_WAN_REFACTOR_MAP.md)
+> - Engine recon & tensor contracts: [fable_memory/](fable_memory/)
+> - Quick try (no GPU or weights needed — the mock engine dry-runs the whole
+>   production pipeline):
+>   ```bash
+>   pip install -r requirements_cognitive.txt
+>   python generate.py --task cognitive-short --prompt "a knight walks into a storm" --duration_seconds 12
+>   python -m pytest tests/cognitive_fabric/   # 160 tests, CPU-only
+>   ```
+
+---
+
+# Wan2.2 (upstream README)
 
 <p align="center">
     <img src="assets/logo.png" width="400"/>

@@ -168,6 +168,11 @@ def attention(
             )
         attn_mask = None
 
+        # Cognitive Fabric refactor R-004 (see fable_memory/refactor_log.md):
+        # match the flash path's dtype contract (output dtype == input dtype).
+        # The fallback previously returned the half-precision compute dtype,
+        # which broke fp32 callers (e.g. WanModel on CPU).
+        out_dtype = q.dtype
         q = q.transpose(1, 2).to(dtype)
         k = k.transpose(1, 2).to(dtype)
         v = v.transpose(1, 2).to(dtype)
@@ -176,4 +181,4 @@ def attention(
             q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
 
         out = out.transpose(1, 2).contiguous()
-        return out
+        return out.type(out_dtype)

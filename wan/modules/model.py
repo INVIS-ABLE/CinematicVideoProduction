@@ -6,7 +6,14 @@ import torch.nn as nn
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
 
-from .attention import flash_attention
+# Cognitive Fabric refactor R-002 (see fable_memory/refactor_log.md):
+# route attention through the `attention()` dispatcher instead of calling
+# `flash_attention()` directly. With flash-attn installed the dispatcher
+# forwards the identical arguments to flash_attention — numerically
+# unchanged. Without it, the existing scaled_dot_product_attention fallback
+# in attention.py makes the real DiT forward runnable on CPU / non-flash
+# GPUs (used by the cognitive-fabric smoke tests).
+from .attention import attention
 
 __all__ = ['WanModel']
 
@@ -142,7 +149,7 @@ class WanSelfAttention(nn.Module):
 
         q, k, v = qkv_fn(x)
 
-        x = flash_attention(
+        x = attention(
             q=rope_apply(q, grid_sizes, freqs),
             k=rope_apply(k, grid_sizes, freqs),
             v=v,
@@ -172,7 +179,7 @@ class WanCrossAttention(WanSelfAttention):
         v = self.v(context).view(b, -1, n, d)
 
         # compute attention
-        x = flash_attention(q, k, v, k_lens=context_lens)
+        x = attention(q, k, v, k_lens=context_lens)
 
         # output
         x = x.flatten(2)

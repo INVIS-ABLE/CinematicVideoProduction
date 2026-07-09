@@ -1,0 +1,61 @@
+# Wan 2.2 Cognitive Fabric — default configuration.
+# Every key here mirrors wan/cognitive_fabric/fabric_config.py DEFAULT_CONFIG;
+# the engine boots without this file, and any subset can override defaults via
+# `--fabric_config <path>` (YAML or JSON).
+cognitive_fabric:
+  enabled: true
+  mode: cinematic
+  target_output: film
+  storyboard_mode: true
+  longform_enabled: true
+  max_minutes: 60
+  base_resolution: 720p
+  refinement_resolution: 1080p
+  qhd_resolution: 1440p
+  final_resolution: 4k
+  frame_rate: 24
+  optional_master_frame_rate: 60
+  chunk_seconds: 5
+  overlap_frames: 8
+  temporal_cache_enabled: true
+  identity_memory_enabled: true
+  object_memory_enabled: true
+  world_memory_enabled: true
+  physics_guidance_enabled: true
+  collision_guidance_enabled: true
+  reference_token_limit: 50
+  repair_loop_enabled: true
+  max_regenerations_per_chunk: 3
+  anime_mode_enabled: false
+  model_factory_enabled: true
+  local_only: true
+
+temporal_memory:
+  overlap_frames: 8
+  max_cache_chunks: 12
+  decay_rate: 0.82
+  preserve_identity_tokens: true
+  preserve_world_tokens: true
+  scene_boundary_decay: 0.35
+  hard_scene_cut_resets_motion: true
+  soft_transition_preserves_motion: true
+  terminal_frames: 8
+
+repair:
+  max_attempts_per_chunk: 3
+  identity_threshold: 0.82
+  world_threshold: 0.75
+  physics_threshold: 0.70
+  anatomy_threshold: 0.78
+  cinematic_threshold: 0.72
+
+resolution_pipeline:
+  base: {name: 720p, width: 1280, height: 720}
+  hd: {name: 1080p, width: 1920, height: 1080}
+  qhd: {name: 1440p, width: 2560, height: 1440}
+  uhd: {name: 4k, width: 3840, height: 2160}
+
+engine:
+  preferred_task: ti2v-5B
+  sample_solver: unipc
+  reference_embed_dim: 256

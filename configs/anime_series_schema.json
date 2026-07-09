@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Wan Cognitive Fabric Series Bible",
+  "description": "Series memory persisted across episodes (wan/cognitive_fabric/brains/anime_brain.py:SeriesBible).",
+  "type": "object",
+  "required": ["series_id", "title"],
+  "properties": {
+    "series_id": {"type": "string"},
+    "title": {"type": "string"},
+    "genre": {"type": "string"},
+    "visual_style": {
+      "type": "object",
+      "properties": {
+        "line_weight": {"type": "string"},
+        "cel_shading": {"type": "string"},
+        "palette": {"type": "string"},
+        "background_art": {"type": "string"}
+      }
+    },
+    "character_bibles": {"type": "object"},
+    "world_bible": {"type": "object"},
+    "object_bible": {"type": "object"},
+    "episode_history": {"type": "array", "items": {"type": "string"}},
+    "continuity_rules": {"type": "array", "items": {"type": "string"}},
+    "forbidden_changes": {"type": "array", "items": {"type": "string"}}
+  }
+}

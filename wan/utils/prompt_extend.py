@@ -10,7 +10,16 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Optional, Union
 
-import dashscope
+# Cognitive Fabric refactor R-005 (see fable_memory/refactor_log.md):
+# dashscope is a cloud SDK and is not required for local operation, but was
+# imported unconditionally — breaking `import wan.utils.prompt_extend` (and
+# therefore generate.py) on base installs and violating local-first at
+# import time. It is now optional: DashScopePromptExpander raises a clear
+# error only when actually used without the SDK installed.
+try:
+    import dashscope
+except ModuleNotFoundError:  # local-first installs
+    dashscope = None
 import torch
 from PIL import Image
 
@@ -134,6 +143,11 @@ class DashScopePromptExpander(PromptExpander):
             is_vl: A flag indicating whether the task involves visual-language processing.
             **kwargs: Additional keyword arguments that can be passed to the function or method.
         '''
+        if dashscope is None:
+            raise ModuleNotFoundError(
+                "DashScopePromptExpander requires the optional 'dashscope' "
+                "package (cloud API). For local-first prompt extension use "
+                "QwenPromptExpander instead.")
         if model_name is None:
             model_name = 'qwen-plus' if not is_vl else 'qwen-vl-max'
         super().__init__(model_name, task, is_vl, **kwargs)

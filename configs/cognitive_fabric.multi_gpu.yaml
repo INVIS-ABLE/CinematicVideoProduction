@@ -1,0 +1,8 @@
+# Multi-GPU rigs: longer chunks, FSDP/ulysses via generate.py distributed flags.
+cognitive_fabric:
+  base_resolution: 720p
+  chunk_seconds: 8
+  reference_token_limit: 50
+engine:
+  distributed: true
+  dtype: bf16

@@ -1,0 +1,8 @@
+# Consumer GPUs under 12 GB: shorter chunks, fewer reference tokens, offload.
+cognitive_fabric:
+  base_resolution: 480p
+  chunk_seconds: 3
+  reference_token_limit: 12
+engine:
+  offload: true
+  dtype: fp16
