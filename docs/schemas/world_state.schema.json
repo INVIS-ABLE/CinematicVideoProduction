@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cinematic-studio.local/schemas/world_state.schema.json",
+  "title": "Cinematic Studio World State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "world_id", "version", "usd_stage_uri", "coordinate_system", "timeline", "entities", "cameras", "lights", "physics", "provenance"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "world_id": {"type": "string", "pattern": "^world_[a-zA-Z0-9_-]+$"},
+    "version": {"type": "integer", "minimum": 1},
+    "name": {"type": "string"},
+    "usd_stage_uri": {"type": "string"},
+    "coordinate_system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["meters_per_unit", "up_axis", "handedness"],
+      "properties": {
+        "meters_per_unit": {"type": "number", "exclusiveMinimum": 0},
+        "up_axis": {"enum": ["Y", "Z"]},
+        "handedness": {"enum": ["right", "left"]}
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frames_per_second", "simulation_hz", "start_frame", "end_frame"],
+      "properties": {
+        "frames_per_second": {"type": "number", "exclusiveMinimum": 0},
+        "simulation_hz": {"type": "number", "exclusiveMinimum": 0},
+        "start_frame": {"type": "number"},
+        "end_frame": {"type": "number"}
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity_id", "version", "name", "semantic_class", "transform", "assets", "collision", "physics", "provenance"],
+        "properties": {
+          "entity_id": {"type": "string"},
+          "version": {"type": "integer", "minimum": 1},
+          "name": {"type": "string"},
+          "semantic_class": {"type": "string"},
+          "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "parent_id": {"type": ["string", "null"]},
+          "active_start_frame": {"type": ["number", "null"]},
+          "active_end_frame": {"type": ["number", "null"]},
+          "visible": {"type": "boolean", "default": true},
+          "transform": {"$ref": "#/$defs/transform"},
+          "bounds": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "minimum": {"$ref": "#/$defs/vector3"},
+              "maximum": {"$ref": "#/$defs/vector3"}
+            }
+          },
+          "assets": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "render_geometry_uri": {"type": ["string", "null"]},
+              "collision_geometry_uri": {"type": ["string", "null"]},
+              "material_uri": {"type": ["string", "null"]},
+              "skeleton_uri": {"type": ["string", "null"]},
+              "animation_uri": {"type": ["string", "null"]}
+            }
+          },
+          "collision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled", "layer", "mask", "shape"],
+            "properties": {
+              "enabled": {"type": "boolean"},
+              "layer": {"type": "string"},
+              "mask": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+              "shape": {"enum": ["none", "box", "sphere", "capsule", "convex_hull", "mesh", "compound"]},
+              "continuous_detection": {"type": "boolean", "default": false}
+            }
+          },
+          "physics": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["body_type"],
+            "properties": {
+              "body_type": {"enum": ["none", "static", "dynamic", "kinematic", "soft", "cloth", "fluid"]},
+              "mass_kg": {"type": ["number", "null"], "exclusiveMinimum": 0},
+              "density_kg_m3": {"type": ["number", "null"], "exclusiveMinimum": 0},
+              "friction": {"type": ["number", "null"], "minimum": 0},
+              "restitution": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+              "linear_damping": {"type": ["number", "null"], "minimum": 0},
+              "angular_damping": {"type": ["number", "null"], "minimum": 0},
+              "linear_velocity": {"$ref": "#/$defs/vector3"},
+              "angular_velocity": {"$ref": "#/$defs/vector3"}
+            }
+          },
+          "locked_fields": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "provenance": {"$ref": "#/$defs/provenance"}
+        }
+      }
+    },
+    "cameras": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["camera_id", "transform", "focal_length_mm", "sensor_width_mm", "aperture_t", "focus_distance_m", "shutter_angle_deg", "iso", "white_balance_k"],
+        "properties": {
+          "camera_id": {"type": "string"},
+          "transform": {"$ref": "#/$defs/transform"},
+          "focal_length_mm": {"type": "number", "exclusiveMinimum": 0},
+          "sensor_width_mm": {"type": "number", "exclusiveMinimum": 0},
+          "aperture_t": {"type": "number", "exclusiveMinimum": 0},
+          "focus_distance_m": {"type": "number", "exclusiveMinimum": 0},
+          "shutter_angle_deg": {"type": "number", "minimum": 0, "maximum": 360},
+          "iso": {"type": "number", "exclusiveMinimum": 0},
+          "white_balance_k": {"type": "number", "exclusiveMinimum": 0},
+          "anamorphic_squeeze": {"type": "number", "exclusiveMinimum": 0}
+        }
+      }
+    },
+    "lights": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["light_id", "type", "transform", "intensity", "colour"],
+        "properties": {
+          "light_id": {"type": "string"},
+          "type": {"enum": ["distant", "point", "spot", "area", "dome", "mesh"]},
+          "transform": {"$ref": "#/$defs/transform"},
+          "intensity": {"type": "number", "minimum": 0},
+          "exposure": {"type": "number"},
+          "colour": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "number"}], "minItems": 3, "maxItems": 3},
+          "temperature_k": {"type": ["number", "null"], "exclusiveMinimum": 0},
+          "ies_uri": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "physics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "engine_version", "gravity", "substeps", "solver_iterations"],
+      "properties": {
+        "engine": {"enum": ["physx", "bullet", "warp", "blender", "custom"]},
+        "engine_version": {"type": "string"},
+        "gravity": {"$ref": "#/$defs/vector3"},
+        "substeps": {"type": "integer", "minimum": 1},
+        "solver_iterations": {"type": "integer", "minimum": 1},
+        "cache_uri": {"type": ["string", "null"]},
+        "cache_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "time_of_day": {"type": ["string", "null"]},
+        "weather": {"type": ["string", "null"]},
+        "hdri_uri": {"type": ["string", "null"]},
+        "colour_working_space": {"type": "string"}
+      }
+    },
+    "provenance": {"$ref": "#/$defs/provenance"}
+  },
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "number"}],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "quaternion": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "number"}, {"type": "number"}],
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["translation", "rotation_quaternion", "scale"],
+      "properties": {
+        "translation": {"$ref": "#/$defs/vector3"},
+        "rotation_quaternion": {"$ref": "#/$defs/quaternion"},
+        "scale": {"$ref": "#/$defs/vector3"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "created_at"],
+      "properties": {
+        "source": {"type": "string"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "model_id": {"type": ["string", "null"]},
+        "model_version": {"type": ["string", "null"]},
+        "artifact_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "licence": {"type": ["string", "null"]},
+        "user_approved": {"type": "boolean"}
+      }
+    }
+  }
+}
