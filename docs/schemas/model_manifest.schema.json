@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cinematic-studio.local/schemas/model_manifest.schema.json",
+  "title": "Cinematic Studio Model Pack Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "version", "name", "source", "licence", "tasks", "artifacts", "runtime", "requirements", "launch", "health", "limits"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"},
+    "version": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision"],
+      "properties": {
+        "repository": {"type": "string"},
+        "revision": {"type": "string"},
+        "model_card": {"type": ["string", "null"]}
+      }
+    },
+    "licence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "weights", "commercial_use", "redistribution", "acceptance_required"],
+      "properties": {
+        "code": {"type": "string"},
+        "weights": {"type": "string"},
+        "commercial_use": {"type": "boolean"},
+        "redistribution": {"type": "boolean"},
+        "acceptance_required": {"type": "boolean"},
+        "notice": {"type": ["string", "null"]},
+        "output_restrictions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "tasks": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+    "inputs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "outputs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "controls": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "native_modes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "width", "height", "fps"],
+        "properties": {
+          "name": {"type": "string"},
+          "width": {"type": "integer", "minimum": 1},
+          "height": {"type": "integer", "minimum": 1},
+          "fps": {"type": "number", "exclusiveMinimum": 0},
+          "min_seconds": {"type": "number", "minimum": 0},
+          "max_seconds": {"type": "number", "exclusiveMinimum": 0}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size_bytes", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "url": {"type": ["string", "null"]},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "optional": {"type": "boolean", "default": false}
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment_id", "lockfile", "python", "isolated_process"],
+      "properties": {
+        "environment_id": {"type": "string"},
+        "lockfile": {"type": "string"},
+        "python": {"type": "string"},
+        "isolated_process": {"const": true},
+        "container_image": {"type": ["string", "null"]}
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operating_systems", "accelerators", "minimum_ram_bytes", "minimum_disk_bytes"],
+      "properties": {
+        "operating_systems": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "accelerators": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "precisions": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "minimum_vram_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "recommended_vram_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "minimum_ram_bytes": {"type": "integer", "minimum": 0},
+        "minimum_disk_bytes": {"type": "integer", "minimum": 0},
+        "minimum_driver": {"type": ["string", "null"]},
+        "minimum_compute_capability": {"type": ["string", "null"]}
+      }
+    },
+    "launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "timeout_seconds", "concurrency"],
+      "properties": {
+        "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "environment": {"type": "object", "additionalProperties": {"type": "string"}},
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "concurrency": {"type": "integer", "minimum": 1}
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport", "deadline_seconds"],
+      "properties": {
+        "transport": {"enum": ["http", "grpc", "stdio", "process"]},
+        "endpoint": {"type": ["string", "null"]},
+        "deadline_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "smoke_test": {"type": ["string", "null"]}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "safe_concurrency": {"type": "integer", "minimum": 1},
+        "estimated_peak_vram_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "estimated_peak_ram_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "max_input_images": {"type": ["integer", "null"], "minimum": 0},
+        "max_input_videos": {"type": ["integer", "null"], "minimum": 0},
+        "max_input_audio": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "fallbacks": {"type": "array", "items": {"type": "string"}},
+    "known_limitations": {"type": "array", "items": {"type": "string"}}
+  }
+}
