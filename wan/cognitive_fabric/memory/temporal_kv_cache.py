@@ -8,6 +8,10 @@ temporal decay and pruning so a 60-minute film never overflows.
 Phase 1 stores frames + embeddings + token snapshots (all real, tested).
 Optional raw attention K/V capture is a Phase-4 hook: `capture()` accepts a
 `kv_snapshot` argument today so the interface is stable.
+
+All retained tensors are moved to CPU. Real Wan generation returns CUDA
+frames; keeping cache payloads on the GPU both leaked VRAM and caused a
+CPU/CUDA matrix multiplication failure in the deterministic embedding path.
 """
 from __future__ import annotations
 
@@ -23,11 +27,11 @@ import torch
 class ChunkMemory:
     chunk_id: str
     scene_id: str
-    terminal_frames: Optional[torch.Tensor] = None      # [3, n, H, W]
-    visual_embedding: Optional[torch.Tensor] = None     # [D]
-    identity_tokens: Optional[torch.Tensor] = None      # [n_id, D]
-    world_tokens: Optional[torch.Tensor] = None         # [n_world, D]
-    kv_snapshot: Optional[Dict[str, torch.Tensor]] = None  # Phase 4
+    terminal_frames: Optional[torch.Tensor] = None      # [3, n, H, W], CPU
+    visual_embedding: Optional[torch.Tensor] = None     # [D], CPU
+    identity_tokens: Optional[torch.Tensor] = None      # [n_id, D], CPU
+    world_tokens: Optional[torch.Tensor] = None         # [n_world, D], CPU
+    kv_snapshot: Optional[Dict[str, torch.Tensor]] = None  # Phase 4, CPU
     motion_direction: Optional[str] = None
     weight: float = 1.0
     captured_at: float = field(default_factory=time.time)
@@ -35,19 +39,38 @@ class ChunkMemory:
 
 def compress_frames_to_embedding(frames: torch.Tensor,
                                  dim: int = 256) -> torch.Tensor:
-    """Cheap deterministic visual embedding: per-channel spatial statistics
-    pooled over frames, projected to `dim` by a fixed seeded projection.
-    Good enough for drift detection between adjacent chunks; replaced by a
-    learned encoder later behind the same signature."""
+    """Cheap deterministic visual embedding stored and calculated on CPU.
+
+    Moving the small terminal window to CPU is intentional: decoded Wan frames
+    live on CUDA, while the fixed seeded projection was historically created on
+    CPU. The old implementation therefore failed on the first real CUDA cache
+    capture and retained large frame tensors in VRAM. This version is device
+    safe, deterministic and keeps the bounded temporal cache off the GPU.
+    """
     if frames.dim() != 4:
         raise ValueError(f"expected [C, F, H, W], got {tuple(frames.shape)}")
-    c, f, h, w = frames.shape
+    frames_cpu = frames.detach().to(device="cpu", dtype=torch.float32)
+    c, f, h, w = frames_cpu.shape
     pooled = torch.nn.functional.adaptive_avg_pool2d(
-        frames.reshape(c * f, 1, h, w), (8, 8)).reshape(c, f, 64).mean(dim=1)
-    flat = pooled.flatten().float()  # [c*64]
-    gen = torch.Generator().manual_seed(0xFAB)
-    projection = torch.randn(flat.numel(), dim, generator=gen)
+        frames_cpu.reshape(c * f, 1, h, w), (8, 8)).reshape(c, f, 64).mean(dim=1)
+    flat = pooled.flatten()  # [c*64], CPU float32
+    gen = torch.Generator(device="cpu").manual_seed(0xFAB)
+    projection = torch.randn(flat.numel(), dim, generator=gen, dtype=torch.float32)
     return (flat @ projection) / flat.numel() ** 0.5
+
+
+def _cpu_clone(tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+    if tensor is None:
+        return None
+    return tensor.detach().to("cpu").clone()
+
+
+def _cpu_snapshot(
+        snapshot: Optional[Dict[str, torch.Tensor]]) -> Optional[Dict[str, torch.Tensor]]:
+    if snapshot is None:
+        return None
+    return {name: value.detach().to("cpu").clone()
+            for name, value in snapshot.items()}
 
 
 class TemporalKVCache:
@@ -73,18 +96,16 @@ class TemporalKVCache:
                 world_tokens: Optional[torch.Tensor] = None,
                 kv_snapshot: Optional[Dict[str, torch.Tensor]] = None,
                 motion_direction: Optional[str] = None) -> ChunkMemory:
-        visual = (compress_frames_to_embedding(terminal_frames)
-                  if terminal_frames is not None else None)
+        terminal_cpu = _cpu_clone(terminal_frames)
+        visual = (compress_frames_to_embedding(terminal_cpu)
+                  if terminal_cpu is not None else None)
         entry = ChunkMemory(
             chunk_id=chunk_id, scene_id=scene_id,
-            terminal_frames=(terminal_frames.detach().clone()
-                             if terminal_frames is not None else None),
+            terminal_frames=terminal_cpu,
             visual_embedding=visual,
-            identity_tokens=(identity_tokens.detach().clone()
-                             if identity_tokens is not None else None),
-            world_tokens=(world_tokens.detach().clone()
-                          if world_tokens is not None else None),
-            kv_snapshot=kv_snapshot,
+            identity_tokens=_cpu_clone(identity_tokens),
+            world_tokens=_cpu_clone(world_tokens),
+            kv_snapshot=_cpu_snapshot(kv_snapshot),
             motion_direction=motion_direction,
         )
         self._entries.append(entry)
@@ -128,8 +149,7 @@ class TemporalKVCache:
     # ---- continuity signal ------------------------------------------------------
 
     def continuity_similarity(self, frames: torch.Tensor) -> Optional[float]:
-        """Cosine similarity between a new chunk's opening frames and the
-        cached previous terminal embedding — a cheap seam-quality signal."""
+        """Cosine similarity between new opening frames and cached terminal frames."""
         latest = self.latest()
         if latest is None or latest.visual_embedding is None:
             return None
@@ -157,6 +177,7 @@ class TemporalKVCache:
                 "visual_embedding": e.visual_embedding,
                 "identity_tokens": e.identity_tokens,
                 "world_tokens": e.world_tokens,
+                "kv_snapshot": e.kv_snapshot,
                 "motion_direction": e.motion_direction,
                 "weight": e.weight,
                 "captured_at": e.captured_at,
@@ -166,7 +187,7 @@ class TemporalKVCache:
 
     @classmethod
     def load_checkpoint(cls, path: str) -> "TemporalKVCache":
-        payload = torch.load(path, weights_only=True)
+        payload = torch.load(path, weights_only=True, map_location="cpu")
         cache = cls(**payload["config"])
         for raw in payload["entries"]:
             cache._entries.append(ChunkMemory(**raw))

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cinematic Studio Local</title>
+  <meta name="description" content="Private local multimodal cinematic video generation." />
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <div class="app-shell">
+    <aside class="rail" aria-label="Studio navigation">
+      <div class="brand-mark" title="Cinematic Studio Local">C</div>
+      <button class="rail-button active" title="Create" aria-label="Create">
+        <span>✦</span>
+      </button>
+      <button class="rail-button" id="railLibrary" title="Library" aria-label="Library">
+        <span>▦</span>
+      </button>
+      <div class="rail-spacer"></div>
+      <button class="rail-button" id="railInfo" title="Local status" aria-label="Local status">
+        <span>◎</span>
+      </button>
+    </aside>
+
+    <main class="studio">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">PRIVATE • LOCAL • CREATOR STUDIO</div>
+          <h1>Cinematic Studio <span>Local</span></h1>
+        </div>
+        <div class="status-cluster">
+          <span class="status-pill" id="privacyStatus"><i></i> Local only</span>
+          <span class="status-pill" id="modelStatus"><i></i> Checking model</span>
+          <button class="ghost-button" id="newProjectButton">New project</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div class="creation-column">
+          <section class="panel composer-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="kicker">Create a scene</p>
+                <h2>Describe the moment, not the machinery.</h2>
+              </div>
+              <span class="project-chip" id="projectChip">Creating project…</span>
+            </div>
+
+            <label class="prompt-wrap" for="promptInput">
+              <textarea id="promttInput" maxlength="4000" placeholder="A lone astronaut crosses a rain-soaked neon market at midnight. The camera glides beside her as steam curls through coloured light…"></textarea>
+              <div class="prompt-footer">
+                <div class="prompt-hints">
+                  <button class="hint-chip" data-prompt="Use one continuous cinematic shot with clear beginning, middle and end.">One-take</button>
+                  <button class="hint-chip" data-prompt="Prioritise natural human motion, stable faces and physically grounded contact.">Natural motion</button>
+                  <button class="hint-chip" data-prompt="Use premium film lighting with motivated practical sources and nuanced contrast.">Film light</button>
+                </div>
+                <span id="promptCount">0 / 4000</span>
+              </div>
+            </label>
+
+            <div class="mode-row" role="group" aria-label="Generation mode">
+              <button class="mode-card active" data-mode="cinematic">
+                <strong>Cinematic</strong>
+                <span>Prompt + visual references</span>
+              </button>
+              <button class="mode-card" data-mode="performance">
+                <strong>Performance</strong>
+                <span>Image + voice + optional motion</span>
+              </button>
+              <button class="mode-card" data-mode="storyboard">
+                <strong>Storyboard</strong>
+                <span>Multi-shot continuity plan</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="panel references-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="kicker">Multimodal references</p>
+                <h2>Direct with images, motion and voice.</h2>
+              </div>
+              <span class="quiet-note">Stored only on this machine</span>
+            </div>
+
+            <div class="upload-grid">
+              <label class="upload-zone" for="imageUpload">
+                <input id="imageUpload" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden />
+                <div class="upload-icon">▧</div>
+                <div>
+                  <strong>Images</strong>
+                  <span>Character, world, style, opening frame</span>
+                </div>
+                <b id="imageCount">0 / 15</b>
+              </label>
+
+              <label class="upload-zone" for="videoUpload">
+                <input id="videoUpload" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" multiple hidden />
+                <div class="upload-icon">▶</div>
+                <div>
+                  <strong>Video references</strong>
+                  <span>Motion, camera, pose, performance</span>
+                </div>
+                <b id="videoCount">0 / 3</b>
+              </label>
+
+              <label class="upload-zone" for="voiceUpload">
+                <input id="voiceUpload" type="file" accept="audio/wav,audio/mpeg,audio/mp4,audio/aac,audio/flac,audio/ogg" multiple hidden />
+                <div class="upload-icon">≋</div>
+                <div>
+                  <strong>Voice samples</strong>
+                  <span>Speech timing, voice track, ambience</span>
+                </div>
+                <b id="voiceCount">0 / 3</b>
+              </label>
+            </div>
+
+            <div id="assetTray" class="asset-tray empty">
+              <div class="empty-state">
+                <span>＋</span>
+                <p>Add references to build a more controlled generation.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel plan-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="kicker">Director preview</p>
+                <h2 id="planTitle">Two-beat cinematic clip</h2>
+              </div>
+              <span class="quiet-note" id="planMeta">8 seconds • 720p • 16:9</span>
+            </div>
+            <div class="shot-strip" id="shotStrip"></div>
+          </section>
+
+          <section class="panel job-panel hidden" id="jobPanel">
+            <div class="job-head">
+              <div>
+                <p class="kicker" id="jobStateLabel">Generating</p>
+                <h2 id="jobMessage">Preparing local job</h2>
+              </div>
+              <strong id="jobProgressLabel">0%</strong>
+            </div>
+            <div class="progress-track"><div id="jobProgressBar"></div></div>
+            <p class="job-caption" id="jobCaption">The first real run may take time while local model weights load.</p>
+          </section>
+
+          <section class="panel result-panel hidden" id="resultPanel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="kicker">Latest render</p>
+                <h2>Local master</h2>
+              </div>
+              <a class="ghost-button" id="downloadResult" href="#" download>Save video</a>
+            </div>
+            <div class="video-stage">
+              <video id="resultVideo" controls playsinline></video>
+              <div class="render-badge" id="renderBadge">LOCAL</div>
+            </div>
+            <div class="result-facts" id="resultFacts"></div>
+          </section>
+        </div>
+
+        <aside class="settings-column">
+          <section class="panel settings-panel">
+            <div class="settings-title">
+              <div>
+                <p class="kicker">Generation controls</p>
+                <h2>Direct the output</h2>
+              </div>
+              <button class="icon-button" id="resetSettings" title="Reset settings">↺</button>
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <span>Duration</span>
+                <strong id="durationValue">8s</strong>
+              </div>
+              <input id="durationInput" type="range" min="4" max="15" value="8" step="1" />
+              <div class="range-marks"><span>4s</span><span>15s</span></div>
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-label"><span>Aspect ratio</span></div>
+              <div class="segmented ratio-grid" id="ratioGroup">
+                <button class="active" data-ratio="16:9">16:9</button>
+                <button data-ratio="9:16">9:16</button>
+                <button data-ratio="1:1">1:1</button>
+                <button data-ratio="4:5">4:5</button>
+                <button data-ratio="2.35:1">2.35</button>
+              </div>
+            </div>
+
+            <div class="setting-block split">
+              <label>
+                <span>Resolution</span>
+                <select id="resolutionInput">
+                  <option value="720p">720p native</option>
+                  <option value="480p">480p fast</option>
+                </select>
+              </label>
+              <label>
+                <span>Style</span>
+                <select id="styleInput">
+                  <option value="cinematic">Cinematic</option>
+                  <option value="photoreal">Photoreal</option>
+                  <option value="anime">Anime</option>
+                  <option value="commercial">Commercial</option>
+                  <option value="documentary">Documentary</option>
+                  <option value="noir">Noir</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="setting-block split">
+              <label>
+                <span>Camera</span>
+                <select id="cameraInput">
+                  <option value="director_auto">Director auto</option>
+                  <option value="locked">Locked</option>
+                  <option value="dolly_in">Dolly in</option>
+                  <option value="tracking">Tracking</option>
+                  <option value="orbit">Orbit</option>
+                  <option value="crane">Crane</option>
+                  <option value="handheld">Handheld</option>
+                </select>
+              </label>
+              <label>
+                <span>Motion</span>
+                <select id="motionInput">
+                  <option value="balanced">Balanced</option>
+                  <option value="subtle">Subtle</option>
+                  <option value="dynamic">Dynamic</option>
+                  <option value="slow_motion">Slow motion</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="setting-block split">
+              <label>
+                <span>Seed</span>
+                <input id="seedInput" type="number" min="0" max="2147483647" value="42" />
+              </label>
+              <label>
+                <span>Sampling steps</span>
+                <input id="stepsInput" type="number" min="8" max="80" value="40" />
+              </label>
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <span>Prompt guidance</span>
+                <strong id="guidanceValue">5.0</strong>
+              </div>
+              <input id="guidanceInput" type="range" min="1" max="12" value="5" step="0.5" />
+            </div>
+
+            <details class="advanced-block">
+              <summary>Advanced controls</summary>
+              <label>
+                <span>Negative prompt</span>
+                <textarea id="negativeInput" maxlength="2000" placeholder="Anything specific to avoid…"></textarea>
+              </label>
+              <label class="toggle-line">
+                <span>
+                  <strong>Add selected voice/audio</strong>
+                  <small>Muxes the active sample, or drives Wan S2V in Performance mode.</small>
+                </span>
+                <input id="audioToggle" type="checkbox" checked />
+              </label>
+              <label class="toggle-line">
+                <span>
+                  <strong>Low-VRAM offload</strong>
+                  <small>Moves model components to CPU between stages.</small>
+                </span>
+                <input id="offloadToggle" type="checkbox" checked />
+              </label>
+            </details>
+
+            <button class="generate-button" id="generateButton">
+              <span class="generate-spark">✦</span>
+              <span><strong>Generate locally</strong><small id="generateSubtext">Wan pipeline with safe mock fallback</small></span>
+              <b>→</b>
+            </button>
+
+            <p class="rights-note">Use only media you own or have permission to use. Obtain consent before using another person’s face or voice.</p>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
