@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cinematic-studio.local/schemas/shot_spec.schema.json",
+  "title": "Cinematic Studio Shot and Take Specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "shot_id", "scene_id", "story_id", "world_id", "duration_seconds", "fps", "intent", "characters", "objects", "camera", "lighting", "action", "physics", "audio", "continuity", "render", "take"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "shot_id": {"type": "string"},
+    "scene_id": {"type": "string"},
+    "story_id": {"type": "string"},
+    "world_id": {"type": "string"},
+    "duration_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "fps": {"type": "number", "exclusiveMinimum": 0},
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dramatic_objective", "visual_objective", "prompt"],
+      "properties": {
+        "dramatic_objective": {"type": "string"},
+        "visual_objective": {"type": "string"},
+        "prompt": {"type": "string"},
+        "negative_constraints": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["character_id", "version", "role", "wardrobe_version", "start_transform", "end_transform"],
+        "properties": {
+          "character_id": {"type": "string"},
+          "version": {"type": "integer", "minimum": 1},
+          "role": {"type": "string"},
+          "wardrobe_version": {"type": "integer", "minimum": 1},
+          "start_transform": {"$ref": "#/$defs/transform"},
+          "end_transform": {"$ref": "#/$defs/transform"},
+          "emotion_start": {"type": ["string", "null"]},
+          "emotion_end": {"type": ["string", "null"]},
+          "voice_profile_id": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity_id", "version", "start_transform", "end_transform"],
+        "properties": {
+          "entity_id": {"type": "string"},
+          "version": {"type": "integer", "minimum": 1},
+          "start_transform": {"$ref": "#/$defs/transform"},
+          "end_transform": {"$ref": "#/$defs/transform"},
+          "required_contacts": {"type": "array", "items": {"type": "string"}},
+          "forbidden_intersections": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["camera_id", "start_transform", "end_transform", "focal_length_mm", "sensor_width_mm", "aperture_t", "focus_distance_m", "shutter_angle_deg", "iso", "white_balance_k"],
+      "properties": {
+        "camera_id": {"type": "string"},
+        "start_transform": {"$ref": "#/$defs/transform"},
+        "end_transform": {"$ref": "#/$defs/transform"},
+        "path_interpolation": {"enum": ["linear", "bezier", "catmull_rom", "handheld", "locked"]},
+        "focal_length_mm": {"type": "number", "exclusiveMinimum": 0},
+        "sensor_width_mm": {"type": "number", "exclusiveMinimum": 0},
+        "aperture_t": {"type": "number", "exclusiveMinimum": 0},
+        "focus_distance_m": {"type": "number", "exclusiveMinimum": 0},
+        "shutter_angle_deg": {"type": "number", "minimum": 0, "maximum": 360},
+        "iso": {"type": "number", "exclusiveMinimum": 0},
+        "white_balance_k": {"type": "number", "exclusiveMinimum": 0},
+        "axis_id": {"type": ["string", "null"]},
+        "screen_direction": {"type": ["string", "null"]}
+      }
+    },
+    "lighting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rig_id", "world_version", "locked_light_ids"],
+      "properties": {
+        "rig_id": {"type": "string"},
+        "world_version": {"type": "integer", "minimum": 1},
+        "locked_light_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "exposure_offset_stops": {"type": "number"},
+        "notes": {"type": "string"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["beats"],
+      "properties": {
+        "beats": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["time_seconds", "description"],
+            "properties": {
+              "time_seconds": {"type": "number", "minimum": 0},
+              "description": {"type": "string"},
+              "entity_ids": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "physics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "engine", "cache_uri", "cache_sha256", "validation_thresholds"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "engine": {"enum": ["physx", "bullet", "warp", "blender", "none"]},
+        "cache_uri": {"type": ["string", "null"]},
+        "cache_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "validation_thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_penetration_m": {"type": "number", "minimum": 0},
+            "max_energy_growth_ratio": {"type": "number", "minimum": 1},
+            "allow_camera_collision": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dialogue", "sample_rate_hz"],
+      "properties": {
+        "sample_rate_hz": {"type": "integer", "minimum": 8000},
+        "dialogue": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["line_id", "character_id", "text", "start_seconds", "voice_profile_id"],
+            "properties": {
+              "line_id": {"type": "string"},
+              "character_id": {"type": "string"},
+              "text": {"type": "string"},
+              "start_seconds": {"type": "number", "minimum": 0},
+              "voice_profile_id": {"type": "string"},
+              "audio_uri": {"type": ["string", "null"]},
+              "alignment_uri": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "ambience_uri": {"type": ["string", "null"]},
+        "music_uri": {"type": ["string", "null"]}
+      }
+    },
+    "continuity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packet_id", "previous_shot_id", "locked_fields", "terminal_frame_uri"],
+      "properties": {
+        "packet_id": {"type": "string"},
+        "previous_shot_id": {"type": ["string", "null"]},
+        "terminal_frame_uri": {"type": ["string", "null"]},
+        "terminal_physics_state_uri": {"type": ["string", "null"]},
+        "locked_fields": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "native_width", "native_height", "delivery_width", "delivery_height", "delivery_codec"],
+      "properties": {
+        "mode": {"enum": ["neural", "3d", "3d_guided_neural", "performance"]},
+        "model_pack_id": {"type": ["string", "null"]},
+        "native_width": {"type": "integer", "minimum": 1},
+        "native_height": {"type": "integer", "minimum": 1},
+        "delivery_width": {"type": "integer", "minimum": 1},
+        "delivery_height": {"type": "integer", "minimum": 1},
+        "delivery_codec": {"type": "string"},
+        "control_passes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "take": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["take_id", "seed", "created_at", "status", "source_hashes", "model_versions", "qc_state"],
+      "properties": {
+        "take_id": {"type": "string"},
+        "seed": {"type": "integer", "minimum": 0},
+        "created_at": {"type": "string", "format": "date-time"},
+        "status": {"enum": ["planned", "running", "failed", "complete", "approved", "superseded"]},
+        "source_hashes": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+        "model_versions": {"type": "object", "additionalProperties": {"type": "string"}},
+        "qc_state": {"enum": ["pending", "passed", "failed", "overridden"]},
+        "approval_user": {"type": ["string", "null"]},
+        "provenance_uri": {"type": ["string", "null"]}
+      }
+    }
+  },
+  "$defs": {
+    "vector3": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "number"}],
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "quaternion": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "number"}, {"type": "number"}],
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["translation", "rotation_quaternion", "scale"],
+      "properties": {
+        "translation": {"$ref": "#/$defs/vector3"},
+        "rotation_quaternion": {"$ref": "#/$defs/quaternion"},
+        "scale": {"$ref": "#/$defs/vector3"}
+      }
+    }
+  }
+}
